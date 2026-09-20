@@ -2,7 +2,10 @@
 
 # ---------- base: shared tooling ----------
 FROM node:24-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
+# Pull in the latest Alpine security patches at build time, not just
+# whatever was baked into the node:24-alpine image when it was published.
+RUN apk update && apk upgrade --no-cache \
+  && apk add --no-cache libc6-compat openssl
 ENV PNPM_HOME="/pnpm" \
     PATH="/pnpm:$PATH"
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
