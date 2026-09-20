@@ -9,8 +9,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { deleteInventoryItem } from "@/actions/inventory";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { Trash2 } from "lucide-react";
 import type { InventoryItem } from "@prisma/client";
 import { StatusBadge } from "@/components/status-badge";
@@ -23,17 +31,23 @@ interface InventoryTableProps {
 
 export function InventoryTable({ items, isAdmin }: InventoryTableProps) {
   const [isPending, startTransition] = useTransition();
+  const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const onDelete = (id: string, name: string) => {
-    if (confirm(`Delete "${name}"? This action is permanent and will be recorded in the audit log.`)) {
-      startTransition(async () => {
-        try {
-          await deleteInventoryItem(id);
-        } catch (error) {
-          alert(error instanceof Error ? error.message : "Failed to delete item");
-        }
-      });
-    }
+  const onConfirmDelete = () => {
+    if (!itemToDelete) return;
+    setDeleteError(null);
+
+    startTransition(async () => {
+      try {
+        await deleteInventoryItem(itemToDelete.id);
+        setItemToDelete(null);
+      } catch (error) {
+        setDeleteError(
+          error instanceof Error ? error.message : "Failed to delete item",
+        );
+      }
+    });
   };
 
   return (
@@ -71,8 +85,10 @@ export function InventoryTable({ items, isAdmin }: InventoryTableProps) {
                       variant="destructive"
                       size="icon-sm"
                       aria-label={`Delete ${item.name}`}
-                      onClick={() => onDelete(item.id, item.name)}
-                      disabled={isPending}
+                      onClick={() => {
+                        setDeleteError(null);
+                        setItemToDelete(item);
+                      }}
                     >
                       <Trash2 />
                     </Button>
@@ -90,6 +106,53 @@ export function InventoryTable({ items, isAdmin }: InventoryTableProps) {
           )}
         </TableBody>
       </Table>
+
+      <Dialog
+        open={itemToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setItemToDelete(null);
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Delete item?</DialogTitle>
+            <DialogDescription>
+              {itemToDelete && (
+                <>
+                  Delete <span className="font-medium">{itemToDelete.name}</span>{" "}
+                  ({itemToDelete.sku})? This action is permanent and will be
+                  recorded in the audit log.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p
+              className="text-sm text-destructive"
+              role="alert"
+              aria-live="polite"
+            >
+              {deleteError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setItemToDelete(null)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={onConfirmDelete}
+              disabled={isPending}
+            >
+              {isPending ? "Deleting..." : "Delete item"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

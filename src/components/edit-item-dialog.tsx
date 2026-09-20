@@ -55,7 +55,13 @@ export function EditItemDialog({ item }: { item: InventoryItem }) {
         await updateInventoryItem(item.id, data);
         setOpen(false);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to update item");
+        const message =
+          err instanceof Error ? err.message : "Failed to update item";
+        if (message === "Item not found") {
+          setOpen(false);
+          return;
+        }
+        setError(message);
       }
     });
   };

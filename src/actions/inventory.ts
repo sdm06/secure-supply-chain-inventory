@@ -16,7 +16,7 @@ async function requireAdmin() {
 
 async function recordAudit(entry: {
   action: "CREATE" | "UPDATE" | "DELETE";
-  itemId: string;
+  itemId: string | null;
   itemName: string;
   actorId: string;
   actorEmail: string | null;
@@ -109,7 +109,7 @@ export async function deleteInventoryItem(id: string) {
 
   await recordAudit({
     action: "DELETE",
-    itemId: existing.id,
+    itemId: null,
     itemName: existing.name,
     actorId: user.id,
     actorEmail: user.email ?? null,
