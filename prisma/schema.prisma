@@ -64,13 +64,36 @@ model VerificationToken {
 }
 
 model InventoryItem {
-  id          String   @id @default(cuid())
+  id          String     @id @default(cuid())
   name        String
   description String?
-  quantity    Int      @default(0)
-  sku         String   @unique
+  quantity    Int        @default(0)
+  sku         String     @unique
   location    String?
-  status      String   @default("IN_STOCK") // e.g., IN_STOCK, OUT_OF_STOCK, PENDING
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status      String     @default("IN_STOCK") // IN_STOCK | OUT_OF_STOCK | PENDING
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  auditLogs   AuditLog[]
+}
+
+model AuditLog {
+  id             String         @id @default(cuid())
+  action         AuditAction
+  itemId         String?
+  itemName       String?
+  actorId        String?
+  actorEmail     String?
+  metadata       String? // JSON summary of the change, e.g. {"name":"old -> new"}
+  createdAt      DateTime       @default(now())
+  inventoryItem  InventoryItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([itemId])
+  @@index([createdAt])
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
 }

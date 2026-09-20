@@ -1,0 +1,36 @@
+# dependencies
+node_modules
+.next
+.next/dev
+out
+
+# build
+build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (opt-in)
+.env
+.env*.local
+
+# next.js
+.vercel
+
+# sqlite database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+prisma/*.db
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

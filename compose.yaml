@@ -1,0 +1,26 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: secure-inventory:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET must be set in .env}
+      - AUTH_TRUST_HOST=true
+      - DATABASE_URL=file:/app/data/dev.db
+    volumes:
+      - inventory-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  inventory-data:

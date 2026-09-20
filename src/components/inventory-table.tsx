@@ -12,22 +12,25 @@ import { Button } from "@/components/ui/button";
 import { deleteInventoryItem } from "@/actions/inventory";
 import { useTransition } from "react";
 import { Trash2 } from "lucide-react";
+import type { InventoryItem } from "@prisma/client";
+import { StatusBadge } from "@/components/status-badge";
+import { EditItemDialog } from "@/components/edit-item-dialog";
 
 interface InventoryTableProps {
-  items: any[];
+  items: InventoryItem[];
   isAdmin: boolean;
 }
 
 export function InventoryTable({ items, isAdmin }: InventoryTableProps) {
   const [isPending, startTransition] = useTransition();
 
-  const onDelete = (id: string) => {
-    if (confirm("Are you sure?")) {
+  const onDelete = (id: string, name: string) => {
+    if (confirm(`Delete "${name}"? This action is permanent and will be recorded in the audit log.`)) {
       startTransition(async () => {
         try {
           await deleteInventoryItem(id);
-        } catch (error: any) {
-          alert(error.message);
+        } catch (error) {
+          alert(error instanceof Error ? error.message : "Failed to delete item");
         }
       });
     }
@@ -40,6 +43,7 @@ export function InventoryTable({ items, isAdmin }: InventoryTableProps) {
           <TableRow>
             <TableHead>SKU</TableHead>
             <TableHead>Name</TableHead>
+            <TableHead>Description</TableHead>
             <TableHead>Quantity</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Location</TableHead>
@@ -51,26 +55,35 @@ export function InventoryTable({ items, isAdmin }: InventoryTableProps) {
             <TableRow key={item.id}>
               <TableCell className="font-medium">{item.sku}</TableCell>
               <TableCell>{item.name}</TableCell>
+              <TableCell className="max-w-xs truncate whitespace-nowrap">
+                {item.description || "—"}
+              </TableCell>
               <TableCell>{item.quantity}</TableCell>
-              <TableCell>{item.status}</TableCell>
-              <TableCell>{item.location}</TableCell>
+              <TableCell>
+                <StatusBadge status={item.status} />
+              </TableCell>
+              <TableCell>{item.location || "—"}</TableCell>
               {isAdmin && (
                 <TableCell className="text-right">
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    onClick={() => onDelete(item.id)}
-                    disabled={isPending}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <EditItemDialog item={item} />
+                    <Button
+                      variant="destructive"
+                      size="icon-sm"
+                      aria-label={`Delete ${item.name}`}
+                      onClick={() => onDelete(item.id, item.name)}
+                      disabled={isPending}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
                 </TableCell>
               )}
             </TableRow>
           ))}
           {items.length === 0 && (
             <TableRow>
-              <TableCell colSpan={isAdmin ? 6 : 5} className="text-center">
+              <TableCell colSpan={isAdmin ? 7 : 6} className="text-center">
                 No items found.
               </TableCell>
             </TableRow>

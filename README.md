@@ -1,36 +1,121 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Secure Supply Chain Inventory
 
-## Getting Started
+A secure, audit-ready inventory management system built with **Next.js 16 (App Router)**, **Prisma + SQLite**, **NextAuth v5 (Credentials)**, **Zod**, and **shadcn/ui**. Role-based access control, a full audit trail, and a DevSecOps toolchain (Docker, Trivy, Gitleaks, GitHub Actions).
 
-First, run the development server:
+## Features
+
+- **Authentication** — NextAuth v5 credentials auth with **bcrypt** password hashing and JWT strategy.
+- **Authorization (RBAC)** — three roles:
+  | Role        | Permissions                                        |
+  | ----------- | -------------------------------------------------- |
+  | `ADMIN`     | Create / edit / delete items, view audit log       |
+  | `MANAGER`*  | Edit items (configurable)                          |
+  | `USER`      | Read-only dashboard                                |
+- **Audit trail** — every create/update/delete logs the actor, timestamp, and a diff of changed fields. Admins see the recent audit log on the dashboard.
+- **Inventory dashboard** — stat cards (total items/units, low stock, out of stock), searchable table, status badges, and add/edit dialogs (admin-gated).
+- **Server actions** — typed via Zod; all mutations revalidate the dashboard and write an `AuditLog` row.
+- **Input validation** — Zod schemas shared between client forms and server actions.
+
+## Tech stack
+
+| Layer      | Choice                                   |
+| ---------- | ---------------------------------------- |
+| Framework  | Next.js 16 (Turbopack), React 19         |
+| Database   | SQLite (Prisma ORM)                       |
+| Auth       | NextAuth v5 (JWT) + bcryptjs             |
+| Validation | Zod v4                                   |
+| UI         | Tailwind CSS v4 + shadcn/ui               |
+| Tooling    | TypeScript strict, ESLint 9, pnpm         |
+
+## Getting started
+
+> Requires **Node.js 22+** and **pnpm 10** (workspace already pinned via `packageManager`).
+> Database is SQLite — no external DB server needed.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+# 1) configure env
+cp .env.example .env
+# 2) set a secret for AUTH_SECRET (e.g. `openssl rand -base64 32`)
+# 3) generate the Prisma client
+pnpm exec prisma generate
+# 4) apply migrations to ./dev.db
+pnpm exec prisma migrate dev
+# 5) seed demo users + items
+pnpm db:seed
+# 6) run the dev server
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000 and sign in with a seeded account:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Email              | Password    | Role   |
+| ------------------ | ----------- | ------ |
+| admin@example.com  | Admin123!   | ADMIN  |
+| user@example.com   | User123!    | USER   |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Working with the database
 
-## Learn More
+```bash
+pnpm db:migrate     # create & apply a new migration after editing prisma/schema.prisma
+pnpm db:deploy      # apply pending migrations (prod) without prompting
+pnpm db:seed        # upsert seed users/items
+pnpm db:validate    # validate the Prisma schema
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Scripts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm dev          # dev server
+pnpm build        # production build
+pnpm start        # run the production build (after `pnpm build`)
+pnpm lint         # ESLint
+pnpm typecheck    # TypeScript (no emit)
+pnpm checks       # lint + typecheck + build, all in one
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Docker
 
-## Deploy on Vercel
+A multi-stage, non-root `Dockerfile` builds a slim production image (runtime user `nextjs`, uid 1001). The entrypoint applies migrations (`prisma migrate deploy`) before starting Next.js.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+# build the image
+docker build -t secure-inventory .
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# run with the included compose file (builds image, mounts a named volume for the DB)
+docker compose up --build
+```
+
+`DATABASE_URL` must point to a persistent, writable path (the compose file mounts `/app/data`). Set `AUTH_SECRET` in your environment / `docker compose` env.
+
+## Security & DevSecOps
+
+- **GitHub Actions** (`.github/workflows/ci.yml`) runs on every push/PR:
+  - **Gitleaks** secret scan
+  - Next.js **lint / typecheck / build**, `prisma validate`, `migrate deploy`, and seed in CI.
+  - **Trivy** container image + filesystem scans (SARIF output, `exit-code: 1` on HIGH/CRITICAL).
+- Threat model applied in code:
+  - bcrypt-hashed passwords (never stored in plaintext).
+  - Server actions enforce RBAC server-side (client gating is UX only).
+  - Zod validation on all inputs; Duplicate. Return-early + typed errors.
+  - Audit logging is immutable-ish: new rows only, never updated/deleted.
+
+## Project structure
+
+```
+src/
+  app/            # App Router routes: (auth) group, dashboard, api/auth
+  components/     # UI + feature components (auth forms, inventory, audit)
+  lib/            # prisma client, password, seed
+  schemas/        # Zod schemas shared client/server
+  actions/        # Server actions (auth, inventory)
+  auth.ts         # NextAuth config
+  proxy.ts        # Next.js proxy (edge auth gate for /dashboard)
+prisma/
+  schema.prisma   # User, InventoryItem, AuditLog
+  migrations/     # versioned SQL migrations
+Dockerfile        # multi-stage non-root production image
+docker-entrypoint.sh
+compose.yaml
+.github/workflows/ci.yml
+```

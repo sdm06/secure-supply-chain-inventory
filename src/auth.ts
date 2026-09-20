@@ -1,60 +1,73 @@
 import NextAuth from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { db } from "@/lib/db";
 import Credentials from "next-auth/providers/credentials";
+import { PrismaAdapter } from "@auth/prisma-adapter";
 import { z } from "zod";
+import { db } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt" },
+  secret: process.env.AUTH_SECRET,
+  pages: {
+    signIn: "/login",
+    signOut: "/login",
+    error: "/login",
+  },
   providers: [
     Credentials({
+      name: "credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
       async authorize(credentials) {
         const parsedCredentials = z
           .object({ email: z.string().email(), password: z.string().min(6) })
           .safeParse(credentials);
 
-        if (parsedCredentials.success) {
-          const { email, password } = parsedCredentials.data;
-          
-          // In a real app, you would verify the password here
-          // For this example, we'll just find the user
-          const user = await db.user.findUnique({
-            where: { email },
-          });
+        if (!parsedCredentials.success) return null;
 
-          if (!user) return null;
-          
-          // If password matches...
-          return user;
-        }
+        const { email, password } = parsedCredentials.data;
 
-        return null;
+        const user = await db.user.findUnique({
+          where: { email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            password: true,
+          },
+        });
+
+        if (!user?.password) return null;
+
+        const passwordValid = await verifyPassword(password, user.password);
+        if (!passwordValid) return null;
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role;
+        token.role = user.role;
       }
       return token;
     },
     async session({ session, token }) {
-      if (token?.role) {
-        session.user.role = token.role as string;
+      if (session.user) {
+        session.user.id = token.sub ?? "";
+        session.user.role = token.role ?? "USER";
       }
       return session;
     },
   },
 });
-
-// Extend session type
-declare module "next-auth" {
-  interface Session {
-    user: {
-      role?: string;
-    } & DefaultSession["user"];
-  }
-}
-import { DefaultSession } from "next-auth";
