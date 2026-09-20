@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: supply-chain
+resources:
+  - ../../base
+  - ingress-host-dev.yaml
+images:
+  - name: secure-supply-chain-inventory
+    newName: ghcr.io/sdm06/secure-supply-chain-inventory
+    # `latest` for inner-loop dev: whatever the last green main build published.
+    # Never use `latest` in prod — the prod overlay pins a digest/tag.
+    newTag: latest
+configMapGenerator:
+  - name: inventory-config
+    behavior: merge
+    literals:
+      - DATABASE_URL=file:/app/data/dev.db
+      - AUTH_TRUST_HOST=true
+      - PORT=3000
+
+# Deliberately NO replica-count patch: SQLite is single-writer — replicas must
+# stay exactly 1 in every environment (base enforces Recreate strategy). See
+# base/deployment.yaml for the rationale.

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: supply-chain
+  labels:
+    app.kubernetes.io/name: secure-supply-chain-inventory
+    app.kubernetes.io/part-of: secure-supply-chain

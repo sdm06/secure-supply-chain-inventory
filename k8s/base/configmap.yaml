@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inventory-config
+  labels:
+    app.kubernetes.io/name: secure-supply-chain-inventory
+data:
+  # SQLite is single-writer; the PVC is mounted read-write at /app/data.
+  # The pod's entrypoint runs `prisma migrate deploy`, then `next start`.
+  DATABASE_URL: "file:/app/data/dev.db"
+  # Next.js Auth.js (v5) behind any reverse proxy must trust the forwarded
+  # host header, otherwise callback URLs are built from a wrong host.
+  AUTH_TRUST_HOST: "true"
+  # Default Node/Next port (next start). Keep in sync with the Service/Ingress.
+  PORT: "3000"

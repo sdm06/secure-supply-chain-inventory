@@ -1,0 +1,15 @@
+# Kustomize base — shared across every environment. Per-environment values
+# (image tag, namespace overrides, hosts, replicas, limits) live in overlays/,
+# never here.
+#
+# NOTE: secret.template.yaml and ingress.template.yaml exist in this dir but are
+# deliberately NOT in `resources` (they are effective-only-if-you-enable
+# documentation). Do not glob them in.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - pvc.yaml

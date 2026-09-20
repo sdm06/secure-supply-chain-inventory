@@ -175,3 +175,66 @@ jobs:
         with:
           sarif_file: trivy-fs-results.sarif
         if: always()
+
+  publish:
+    name: Publish image (GHCR + OIDC)
+    runs-on: ubuntu-latest
+    needs: [docker, quality, e2e]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/sdm06/secure-supply-chain-inventory:latest
+            ghcr.io/sdm06/secure-supply-chain-inventory:${{ github.sha }}
+            ghcr.io/sdm06/secure-supply-chain-inventory:${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  manifest-gate:
+    name: Manifest gate (kustomize + kubeconform)
+    runs-on: ubuntu-latest
+    needs: publish
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.27.2
+      - name: Install kubeconform
+        run: |
+          curl -sfLo /tmp/kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz"
+          sudo tar -C /usr/local/bin -xzf /tmp/kubeconform.tar.gz kubeconform
+          kubeconform -v
+      - name: Render and validate base + overlays
+        run: |
+          TAG="${{ github.sha }}"
+          gate_failed=0
+          for env in base overlays/dev overlays/prod; do
+            # Resolve __TAG__ (prod pins it) into a temp copy, then render THAT,
+            # so the gate validates the exact tag-resolved manifests the release
+            # step will apply — never a stale literal placeholder.
+            cp -R k8s/${env} /tmp/gate-${env////-}
+            sed -i -e "s|__TAG__|${TAG}|g" $(find /tmp/gate-${env////-} -name kustomization.y*ml)
+            kubectl kustomize --load-restrictor LoadRestrictionsNone \
+              --reorder none /tmp/gate-${env////-} \
+              | kubeconform -strict -summary >/dev/null || gate_failed=1
+          done
+          exit "$gate_failed"

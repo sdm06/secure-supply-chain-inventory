@@ -16,11 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run",
-    "test:e2e": "playwright test",
-    "typecheck": "tsc --noEmit"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "test:e2e": "playwright test"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

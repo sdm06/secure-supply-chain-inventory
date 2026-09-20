@@ -1,0 +1,31 @@
+# Prod overlay — the deployment CI actually ships against GHCR.
+#   * image is pinned to the exact tag/version CI just published (never :latest)
+#   * AUTH_SECRET lives in a pre-created k8s Secret (inventory-secret) —
+#     NOT committed anywhere; see base/secret.template.yaml
+#   * TLS is pre-provisioned (secretName: inventory-tls) — you create the
+#     kubernetes.io/tls Secret out-of-band before deploy. cert-manager is NOT
+#     installed in the released pipelines on purpose.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: supply-chain-prod
+namePrefix: prod-
+resources:
+  - ../../base
+  - ingress.yaml
+images:
+  - name: secure-supply-chain-inventory
+    newName: ghcr.io/sdm06/secure-supply-chain-inventory
+    newTag: __TAG__
+configMapGenerator:
+  - name: inventory-config
+    behavior: merge
+    literals:
+      - DATABASE_URL=file:/app/data/prod.db
+      - AUTH_TRUST_HOST=true
+      - PORT=3000
+      - APP_VERSION=__TAG__
+patches:
+  - path: resource-limits.yaml
+    target:
+      kind: Deployment
+      name: secure-supply-chain-inventory

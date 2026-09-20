@@ -1,0 +1,19 @@
+# Strict rollout for SQLite/Next: keep cpu/mem in the range the (single) pod
+# can actually hold while running `prisma migrate deploy` + `next start`,
+# without starving the node or getting OOM-killed under a Trivy-scan soak.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-supply-chain-inventory
+spec:
+  template:
+    spec:
+      containers:
+        - name: inventory
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1024Mi

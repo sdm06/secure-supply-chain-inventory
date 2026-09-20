@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secure-supply-chain-inventory
+  labels:
+    app.kubernetes.io/name: secure-supply-chain-inventory
+    app.kubernetes.io/instance: base
+    app.kubernetes.io/version: base
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 1
+  # SQLite is single-writer: replicas must stay 1, and a rolling upgrade must
+  # never run two pods on the same volume at the same time -> Recreate.
+  strategy:
+    type: Recreate
+    rollingUpdate: null
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: secure-supply-chain-inventory
+      app.kubernetes.io/instance: base
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: secure-supply-chain-inventory
+        app.kubernetes.io/instance: base
+        app.kubernetes.io/version: base
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        allowPrivilegeEscalation: false
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: inventory
+          image: ghcr.io/sdm06/secure-supply-chain-inventory:__TAG__
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            # Environment values are injected from the configmap so overlays can
+            # override them (dev.db vs prod.db) via configMapGenerator merge;
+            # everything AWS/secret stays in inventory-secret (below).
+            - configMapRef:
+                name: inventory-config
+          env:
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: inventory-secret
+                  key: auth-secret
+          # Image entrypoint runs `prisma migrate deploy` then `next start`.
+          # SQLite puts its file at DATABASE_URL (file:/app/data/dev.db).
+          volumeMounts:
+            - name: database
+              mountPath: /app/data
+            # Next start + Prisma write scratch here; keep it decoupled from
+            # the RO root filesystem.
+            - name: tmp
+              mountPath: /tmp
+            - name: nextcache
+              mountPath: /app/.next/cache
+          startupProbe:
+            httpGet: { path: /api/health, port: http }
+            failureThreshold: 30
+            periodSeconds: 3
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: database
+          persistentVolumeClaim:
+            claimName: inventory-data
+        - name: tmp
+          emptyDir: {}
+        - name: nextcache
+          emptyDir: {}
