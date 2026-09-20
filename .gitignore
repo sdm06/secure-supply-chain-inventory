@@ -46,3 +46,16 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /blob-report/
+
+# Local SQLite database
+/dev.db
+/prisma/dev.db
+
+# Local dev + CI artifacts (never commit)
+.env
+/test-results/
+/playwright-report/
+/blob-report/
+prisma/dev.db
+/dev.db
+.env
