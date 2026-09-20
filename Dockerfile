@@ -1,11 +1,11 @@
 # syntax=docker/dockerfile:1
 
 # ---------- base: shared tooling ----------
-FROM node:22-alpine AS base
+FROM node:24-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
 ENV PNPM_HOME="/pnpm" \
     PATH="/pnpm:$PATH"
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
 
 # ---------- deps: full install (includes dev deps + prisma CLI) ----------
 FROM base AS deps
