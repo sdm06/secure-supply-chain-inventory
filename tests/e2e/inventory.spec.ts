@@ -17,14 +17,14 @@ test("anonymous visitors are redirected to login", async ({ page }) => {
 
 test("admin sees inventory controls and the audit trail", async ({ page }) => {
   await login(page, ADMIN.email, ADMIN.password);
-  await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inventory", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Item" })).toBeVisible();
   await expect(page.getByText("Recent Activity")).toBeVisible();
 });
 
 test("standard user gets a read-only, controls-free view", async ({ page }) => {
   await login(page, USER.email, USER.password);
-  await expect(page.getByRole("heading", { name: "Inventory" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inventory", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Item" })).toHaveCount(0);
   await expect(page.getByText("Recent Activity")).toHaveCount(0);
 });
