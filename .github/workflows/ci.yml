@@ -153,8 +153,11 @@ jobs:
           exit-code: 0
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          output: trivy-table.txt
         env:
           TRIVY_SKIP_VERSION_CHECK: "true"
+      - name: Print Trivy table
+        run: cat trivy-table.txt
       - name: Trivy image scan (sarif, gate)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -249,14 +252,23 @@ jobs:
         run: |
           TAG="${{ github.sha }}"
           gate_failed=0
+
+          # Copy the whole k8s/ tree ONCE, preserving the relative structure
+          # between overlays/* and base. Overlay kustomization.yaml files
+          # reference ../../base as a relative path — copying each env
+          # folder out in isolation (as before) breaks that reference.
+          rm -rf /tmp/gate-k8s
+          cp -R k8s /tmp/gate-k8s
+
+          # Resolve __TAG__ everywhere in the copied tree, so the gate
+          # validates the exact tag-resolved manifests the release step
+          # will apply — never a stale literal placeholder.
+          find /tmp/gate-k8s -name 'kustomization.y*ml' \
+            -exec sed -i -e "s|__TAG__|${TAG}|g" {} +
+
           for env in base overlays/dev overlays/prod; do
-            # Resolve __TAG__ (prod pins it) into a temp copy, then render THAT,
-            # so the gate validates the exact tag-resolved manifests the release
-            # step will apply — never a stale literal placeholder.
-            cp -R k8s/${env} /tmp/gate-${env////-}
-            sed -i -e "s|__TAG__|${TAG}|g" $(find /tmp/gate-${env////-} -name kustomization.y*ml)
             kubectl kustomize --load-restrictor LoadRestrictionsNone \
-              --reorder none /tmp/gate-${env////-} \
+              /tmp/gate-k8s/${env} \
               | kubeconform -strict -summary >/dev/null || gate_failed=1
           done
           exit "$gate_failed"
