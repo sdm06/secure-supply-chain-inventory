@@ -88,6 +88,11 @@ docker compose up --build
 
 `DATABASE_URL` must point to a persistent, writable path (the compose file mounts `/app/data`). Set `AUTH_SECRET` in your environment / `docker compose` env.
 
+> **First run:** the production image only applies migrations on start — it does **not** seed demo data and registration always creates a read-only `USER` account. A brand-new container therefore starts empty with no admin. To get a usable admin + demo items, either
+> 1. run the local seed and point the app at its SQLite file (`prisma migrate dev` + `pnpm db:seed`, then sign in as `admin@example.com / Admin123!`), or
+> 2. promote an existing account after registering:
+>    `docker exec <container> node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.user.updateMany({where:{email:'you@example.com'},data:{role:'ADMIN'}}).then(()=>process.exit(0))"` (then sign out/in — the role is set into the JWT at login).
+
 ## Security & DevSecOps
 
 - **GitHub Actions** (`.github/workflows/ci.yml`) runs on every push and PR, with PR reviewers protected by **[required status checks](##github-actions)**:
@@ -110,6 +115,7 @@ docker compose up --build
 ```
 src/
   app/            # App Router routes: (auth) group, dashboard, api/auth
+  app/error.tsx   # app-level error boundary (graceful page instead of a bare error)
   components/     # UI + feature components (auth forms, inventory, audit)
   lib/            # prisma client, password, seed
   schemas/        # Zod schemas shared client/server
