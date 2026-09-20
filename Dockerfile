@@ -16,31 +16,47 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
+# ---------- prod-deps: production-only install for the runtime image ----------
+# Kept separate from the builder so the final image never ships devDependencies
+# (they carry HIGH/CRITICAL CVEs that make the Trivy image scan fail).
+FROM base AS prod-deps
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY package.json pnpm-lock.yaml ./
+COPY prisma ./prisma
+COPY prisma.config.ts ./
+RUN pnpm install --prod --frozen-lockfile \
+  && pnpm exec prisma generate
+
 # ---------- builder: generate client + build app ----------
 FROM base AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm prisma generate
+RUN pnpm exec prisma generate
 RUN pnpm build
 
 # ---------- runner: slim production image ----------
-FROM base AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
+RUN apk update && apk upgrade --no-cache \
+  && apk add --no-cache libc6-compat openssl
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000
+
+# Bundled npm/corepack ship vulnerable tar/ip-address/brace-expansion and are
+# not needed at runtime (the entrypoint runs node + the prisma CLI directly).
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/corepackx
 
 # Non-root user
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
-# Copy node_modules from builder (not deps) — it already contains the
-# generated Prisma client, and pnpm's nested .pnpm store layout means
-# a top-level node_modules/.prisma path doesn't reliably exist to copy separately.
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
