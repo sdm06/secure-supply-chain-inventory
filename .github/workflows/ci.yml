@@ -39,6 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -71,6 +73,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -99,6 +103,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
+        with:
+          version: 12.5.1
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -111,8 +117,18 @@ jobs:
         run: pnpm exec prisma migrate deploy
       - name: Seed e2e database
         run: pnpm db:seed
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      - name: Install Playwright OS deps only
+        run: pnpm exec playwright install-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
       - name: Run Playwright tests
         run: pnpm test:e2e
 
@@ -134,7 +150,18 @@ jobs:
           tags: secure-inventory:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
-      - name: Trivy image scan
+      - name: Trivy image scan (table, for logs)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: secure-inventory:ci
+          format: table
+          exit-code: 0
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+        env:
+          TRIVY_SKIP_VERSION_CHECK: "true"
+      - name: Trivy image scan (sarif, gate)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
@@ -145,6 +172,8 @@ jobs:
           ignore-unfixed: true
           limit-severities-for-sarif: true
           output: trivy-results.sarif
+        env:
+          TRIVY_SKIP_VERSION_CHECK: "true"
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v4
         with:
@@ -167,6 +196,8 @@ jobs:
           severity: HIGH,CRITICAL
           limit-severities-for-sarif: true
           output: trivy-fs-results.sarif
+        env:
+          TRIVY_SKIP_VERSION_CHECK: "true"
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v4
         with:
