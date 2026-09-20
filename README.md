@@ -90,14 +90,19 @@ docker compose up --build
 
 ## Security & DevSecOps
 
-- **GitHub Actions** (`.github/workflows/ci.yml`) runs on every push/PR:
-  - **Gitleaks** secret scan
-  - Next.js **lint / typecheck / build**, `prisma validate`, `migrate deploy`, and seed in CI.
-  - **Trivy** container image + filesystem scans (SARIF output, `exit-code: 1` on HIGH/CRITICAL).
+- **GitHub Actions** (`.github/workflows/ci.yml`) runs on every push and PR, with PR reviewers protected by **[required status checks](##github-actions)**:
+  - **Secret scan** — Gitleaks forbids leaks.
+  - **Quality gates** — lint, typecheck, Next.js build, `prisma validate`, `migrate deploy`, seed, all in CI.
+  - **Unit tests** — Vitest (`pnpm test:unit`)
+  - **Container image** — multi-stage build + **Trivy** image scan (SARIF, `exit-code: 1` on HIGH/CRITICAL).
+  - **Filesystem scan** — **Trivy** `fs` scan of the repo (SARIF).
+  - **Manifest gate** — committed k8s manifests validated with **kubeconform + kustomize build** (`ci.yml` → `manifest-gate`, the `check_kubeform_ci_gate`-equivalent guard) before anything ships.
+  - **Publish + manifest gate** — images pushed to GHCR with OIDC only after `docker`, `quality`, and `e2e` pass; the gate that blocks `/k8s` drift from reaching prod.
+  - **End-to-end** — Playwright (Chromium) + a seeded `AUTH`-aware session.
 - Threat model applied in code:
   - bcrypt-hashed passwords (never stored in plaintext).
   - Server actions enforce RBAC server-side (client gating is UX only).
-  - Zod validation on all inputs; Duplicate. Return-early + typed errors.
+  - Zod validation on all inputs. Return-early + typed errors.
   - Audit logging is immutable-ish: new rows only, never updated/deleted.
 
 ## Project structure
